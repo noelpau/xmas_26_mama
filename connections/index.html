@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<title></title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100dvh;
+        font-family: Arial, sans-serif;
+        background: #ffffff;
+        color: #222;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 12px;
+    }
+
+    #message {
+        min-height: 35px;
+        font-weight: bold;
+        text-align: center;
+        margin-bottom: 10px;
+        font-size: 15px;
+    }
+
+    #solved {
+        width: min(100%, 420px);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .solved-group {
+        border-radius: 6px;
+        text-align: center;
+        padding: 15px 8px;
+        color: #222;
+    }
+
+    .solved-group strong {
+        display: block;
+        font-size: 16px;
+        margin-bottom: 5px;
+    }
+
+    .solved-group span {
+        font-size: 13px;
+    }
+
+    #grid {
+        width: min(100%, 420px);
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .word {
+        aspect-ratio: 1.25;
+        border: none;
+        border-radius: 6px;
+        background: #efefe6;
+        font-weight: bold;
+        font-size: clamp(11px, 3vw, 15px);
+        color: #222;
+        cursor: pointer;
+        padding: 4px;
+        overflow-wrap: anywhere;
+        touch-action: manipulation;
+    }
+
+    .word.selected {
+        background: #5a594e;
+        color: white;
+    }
+
+    #controls {
+        width: min(100%, 420px);
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 25px;
+    }
+
+    .control-button {
+        border: 1px solid #222;
+        background: white;
+        color: #222;
+        border-radius: 25px;
+        padding: 12px 20px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+        touch-action: manipulation;
+    }
+
+    .control-button.primary {
+        background: #222;
+        color: white;
+    }
+
+    .control-button:disabled {
+        opacity: 0.35;
+        cursor: default;
+    }
+
+    #mistakes {
+        margin-top: 25px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+    }
+
+    .dot {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        background: #5a594e;
+    }
+
+    #result {
+        display: none;
+        margin-top: 25px;
+        text-align: center;
+        font-weight: bold;
+        font-size: 18px;
+        line-height: 1.5;
+    }
+
+    #retry {
+        display: none;
+        margin-top: 20px;
+    }
+
+    .retry-button {
+        background: #6aaa64;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 14px 25px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    @media (max-width: 370px) {
+        .word {
+            font-size: 11px;
+        }
+
+        #controls {
+            gap: 5px;
+        }
+
+        .control-button {
+            padding: 11px 13px;
+        }
+    }
+</style>
+</head>
+
+<body>
+
+<div id="message"></div>
+
+<div id="solved"></div>
+
+<div id="grid"></div>
+
+<div id="controls">
+    <button class="control-button" onclick="shuffleWords()">
+        Mischen
+    </button>
+
+    <button class="control-button" onclick="clearSelection()">
+        Abwählen
+    </button>
+
+    <button class="control-button primary" id="submit" onclick="submitGuess()" disabled>
+        Prüfen
+    </button>
+</div>
+
+<div id="mistakes">
+    <span>Verbleibende Versuche:</span>
+    <div id="dots" style="display:flex; gap:5px;"></div>
+</div>
+
+<div id="result">
+    Gut gemacht, das war dein Rätsel für heute.
+</div>
+
+<div id="retry">
+    <button class="retry-button" onclick="restartGame()">
+        Noch einmal versuchen
+    </button>
+</div>
+
+<script>
+
+const groups = [
+    {
+        name: "Surfbegriffe",
+        words: ["Trapez", "Baum", "Schwert", "Latte"],
+        color: "#f9df6d"
+    },
+    {
+        name: "Kurse zum Wind",
+        words: ["Am", "Vor", "Halb", "Raum"],
+        color: "#a0c35a"
+    },
+    {
+        name: "Leute, die Kirsten heißen",
+        words: ["Brodde", "Dunst", "Block", "Boie"],
+        color: "#b0c4ef"
+    },
+    {
+        name: "Hobbys deiner Tochter",
+        words: ["Surfen", "Tanzen", "Nähen", "Lesen"],
+        color: "#ba81c5"
+    }
+];
+
+const MAX_MISTAKES = 4;
+
+let words = [];
+let selected = [];
+let solvedGroups = [];
+let mistakes = 0;
+let gameOver = false;
+
+const grid = document.getElementById("grid");
+const solved = document.getElementById("solved");
+const message = document.getElementById("message");
+const submitButton = document.getElementById("submit");
+
+// Fisher-Yates shuffle
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
+// Start game
+function restartGame() {
+    words = shuffleArray(groups.flatMap(group => group.words));
+    selected = [];
+    solvedGroups = [];
+    mistakes = 0;
+    gameOver = false;
+
+    solved.innerHTML = "";
+    message.textContent = "";
+
+    document.getElementById("result").style.display = "none";
+    document.getElementById("retry").style.display = "none";
+    document.getElementById("controls").style.display = "flex";
+
+    renderGrid();
+    renderMistakes();
+}
+
+// Display words
+function renderGrid() {
+    grid.innerHTML = "";
+
+    words.forEach(word => {
+        const button = document.createElement("button");
+        button.className = "word";
+        button.textContent = word;
+
+        if (selected.includes(word)) {
+            button.classList.add("selected");
+        }
+
+        button.addEventListener("click", () => selectWord(word));
+
+        grid.appendChild(button);
+    });
+
+    submitButton.disabled = selected.length !== 4 || gameOver;
+}
+
+// Select word
+function selectWord(word) {
+    if (gameOver) return;
+
+    if (selected.includes(word)) {
+        selected = selected.filter(w => w !== word);
+    } else {
+        if (selected.length >= 4) return;
+        selected.push(word);
+    }
+
+    renderGrid();
+}
+
+// Shuffle remaining words
+function shuffleWords() {
+    if (gameOver) return;
+    shuffleArray(words);
+    renderGrid();
+}
+
+// Clear selection
+function clearSelection() {
+    if (gameOver) return;
+    selected = [];
+    renderGrid();
+}
+
+// Check selected words
+function submitGuess() {
+    if (selected.length !== 4 || gameOver) return;
+
+    const match = groups.find(group =>
+        !solvedGroups.includes(group.name) &&
+        group.words.every(word => selected.includes(word))
+    );
+
+    if (match) {
+        solvedGroups.push(match.name);
+
+        words = words.filter(word => !match.words.includes(word));
+        selected = [];
+
+        const row = document.createElement("div");
+        row.className = "solved-group";
+        row.style.backgroundColor = match.color;
+
+        const title = document.createElement("strong");
+        title.textContent = match.name;
+
+        const wordList = document.createElement("span");
+        wordList.textContent = match.words.join(", ");
+
+        row.appendChild(title);
+        row.appendChild(wordList);
+        solved.appendChild(row);
+
+        showMessage("Richtig!");
+
+        renderGrid();
+
+        if (solvedGroups.length === 4) {
+            gameOver = true;
+            document.getElementById("result").style.display = "block";
+            document.getElementById("controls").style.display = "none";
+            document.getElementById("mistakes").style.display = "none";
+        }
+
+    } else {
+        mistakes++;
+
+        renderMistakes();
+
+        if (mistakes >= MAX_MISTAKES) {
+            gameOver = true;
+            showMessage("Leider nicht geschafft!");
+            document.getElementById("retry").style.display = "block";
+            document.getElementById("controls").style.display = "none";
+        } else {
+            const oneAway = groups.some(group => {
+                if (solvedGroups.includes(group.name)) return false;
+
+                const matches = selected.filter(word =>
+                    group.words.includes(word)
+                ).length;
+
+                return matches === 3;
+            });
+
+            showMessage(oneAway ? "Nur eines daneben!" : "Leider falsch!");
+        }
+
+        selected = [];
+        renderGrid();
+    }
+}
+
+// Display remaining attempts
+function renderMistakes() {
+    const dots = document.getElementById("dots");
+    dots.innerHTML = "";
+
+    for (let i = 0; i < MAX_MISTAKES - mistakes; i++) {
+        const dot = document.createElement("div");
+        dot.className = "dot";
+        dots.appendChild(dot);
+    }
+}
+
+// Temporary messages
+function showMessage(text) {
+    message.textContent = text;
+
+    setTimeout(() => {
+        if (message.textContent === text) {
+            message.textContent = "";
+        }
+    }, 2000);
+}
+
+// Initialize
+restartGame();
+
+</script>
+
+</body>
+</html>
