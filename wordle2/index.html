@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#ffffff">
+<title></title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #ffffff;
+        color: #222;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100dvh;
+    }
+
+    #message {
+        height: 30px;
+        font-weight: bold;
+        text-align: center;
+        margin-top: 20px;
+    }
+
+    #board {
+        display: grid;
+        grid-template-rows: repeat(6, 1fr);
+        gap: 5px;
+        width: min(90vw, 340px);
+        margin: 15px auto;
+    }
+
+    .row {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 5px;
+    }
+
+    .tile {
+        aspect-ratio: 1;
+        border: 2px solid #d3d6da;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .tile.filled {
+        border-color: #878a8c;
+    }
+
+    .tile.correct {
+        background: #6aaa64;
+        border-color: #6aaa64;
+        color: white;
+    }
+
+    .tile.present {
+        background: #c9b458;
+        border-color: #c9b458;
+        color: white;
+    }
+
+    .tile.absent {
+        background: #787c7e;
+        border-color: #787c7e;
+        color: white;
+    }
+
+    #keyboard {
+        width: min(96vw, 500px);
+        margin-top: auto;
+        padding: 15px 0 20px;
+    }
+
+    .keyboard-row {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        margin-bottom: 7px;
+    }
+
+    .key {
+        flex: 1;
+        height: 52px;
+        border: none;
+        border-radius: 5px;
+        background: #d3d6da;
+        font-size: 15px;
+        font-weight: bold;
+        cursor: pointer;
+        padding: 0;
+        touch-action: manipulation;
+    }
+
+    .key.wide {
+        flex: 1.5;
+        font-size: 12px;
+    }
+
+    .key.correct {
+        background: #6aaa64;
+        color: white;
+    }
+
+    .key.present {
+        background: #c9b458;
+        color: white;
+    }
+
+    .key.absent {
+        background: #787c7e;
+        color: white;
+    }
+
+    #result {
+        display: none;
+        font-size: 18px;
+        font-weight: bold;
+        text-align: center;
+        padding: 20px;
+    }
+
+    #retry {
+        display: none;
+        text-align: center;
+        margin: 15px;
+    }
+
+    .retry-button {
+        background: #6aaa64;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 14px 25px;
+        font-size: 17px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    @media (max-height: 700px) {
+        .key {
+            height: 43px;
+        }
+
+        #board {
+            margin: 5px auto;
+        }
+
+        #message {
+            margin-top: 10px;
+        }
+    }
+</style>
+</head>
+
+<body>
+
+<div id="message"></div>
+
+<div id="board"></div>
+
+<div id="result">
+    Gut gemacht, das war dein Rätsel für heute.
+</div>
+
+<div id="retry">
+    <button onclick="restartGame()" class="retry-button">
+        Nochmal versuchen
+    </button>
+</div>
+
+<div id="keyboard"></div>
+
+<script>
+
+const ANSWER = "URLAUB";
+const MAX_ATTEMPTS = 6;
+const WORD_LENGTH = ANSWER.length;
+
+let currentRow = 0;
+let currentGuess = "";
+let gameOver = false;
+
+const board = document.getElementById("board");
+const keyboard = document.getElementById("keyboard");
+const message = document.getElementById("message");
+
+// Create board
+for (let r = 0; r < MAX_ATTEMPTS; r++) {
+    const row = document.createElement("div");
+    row.className = "row";
+
+    for (let c = 0; c < WORD_LENGTH; c++) {
+        const tile = document.createElement("div");
+        tile.className = "tile";
+        row.appendChild(tile);
+    }
+
+    board.appendChild(row);
+}
+
+// German keyboard
+const keyboardLayout = [
+    "QWERTZUIOPÜ",
+    "ASDFGHJKLÄÖ",
+    ["ENTER", ..."YXCVBNM", "⌫"]
+];
+
+keyboardLayout.forEach(row => {
+    const keyboardRow = document.createElement("div");
+    keyboardRow.className = "keyboard-row";
+
+    for (const letter of row) {
+        const button = document.createElement("button");
+
+        button.textContent = letter;
+        button.className = "key";
+
+        if (letter === "ENTER" || letter === "⌫") {
+            button.classList.add("wide");
+        }
+
+        button.dataset.key = letter;
+
+        button.addEventListener("click", () => handleKey(letter));
+
+        keyboardRow.appendChild(button);
+    }
+
+    keyboard.appendChild(keyboardRow);
+});
+
+// Handle input
+function handleKey(key) {
+    if (gameOver) return;
+
+    if (key === "ENTER") {
+        submitGuess();
+        return;
+    }
+
+    if (key === "⌫" || key === "BACKSPACE") {
+        currentGuess = currentGuess.slice(0, -1);
+        updateBoard();
+        return;
+    }
+
+    if (/^[A-ZÄÖÜ]$/.test(key) && currentGuess.length < WORD_LENGTH) {
+        currentGuess += key;
+        updateBoard();
+    }
+}
+
+// Physical keyboard support
+document.addEventListener("keydown", event => {
+    let key = event.key.toUpperCase();
+
+    if (key === "BACKSPACE") {
+        handleKey("BACKSPACE");
+    } else if (key === "ENTER") {
+        handleKey("ENTER");
+    } else {
+        handleKey(key);
+    }
+});
+
+// Update current row
+function updateBoard() {
+    const row = board.children[currentRow];
+    const tiles = row.children;
+
+    for (let i = 0; i < WORD_LENGTH; i++) {
+        const letter = currentGuess[i] || "";
+
+        tiles[i].textContent = letter;
+        tiles[i].classList.toggle("filled", !!letter);
+    }
+}
+
+// Submit guess
+function submitGuess() {
+    if (currentGuess.length !== WORD_LENGTH) {
+        showMessage(`Bitte ${WORD_LENGTH} Buchstaben eingeben!`);
+        return;
+    }
+
+    const row = board.children[currentRow];
+    const tiles = row.children;
+
+    // Wordle scoring, including duplicate letters
+    const result = Array(WORD_LENGTH).fill("absent");
+    const remaining = ANSWER.split("");
+
+    // Correct positions
+    for (let i = 0; i < WORD_LENGTH; i++) {
+        if (currentGuess[i] === ANSWER[i]) {
+            result[i] = "correct";
+            remaining[i] = null;
+        }
+    }
+
+    // Misplaced letters
+    for (let i = 0; i < WORD_LENGTH; i++) {
+        if (result[i] !== "correct") {
+            const index = remaining.indexOf(currentGuess[i]);
+
+            if (index !== -1) {
+                result[i] = "present";
+                remaining[index] = null;
+            }
+        }
+    }
+
+    // Color tiles and keyboard
+    for (let i = 0; i < WORD_LENGTH; i++) {
+        tiles[i].classList.add(result[i]);
+        updateKeyboard(currentGuess[i], result[i]);
+    }
+
+    if (currentGuess === ANSWER) {
+        gameOver = true;
+        message.textContent = "";
+        document.getElementById("result").style.display = "block";
+        return;
+    }
+
+    currentRow++;
+    currentGuess = "";
+
+    if (currentRow === MAX_ATTEMPTS) {
+        gameOver = true;
+        showMessage("Leider nicht geschafft. Versuch es nochmal!");
+        document.getElementById("retry").style.display = "block";
+    }
+}
+
+// Update keyboard colors
+function updateKeyboard(letter, status) {
+    const button = [...document.querySelectorAll(".key")]
+        .find(b => b.dataset.key === letter);
+
+    if (!button) return;
+
+    const priority = {
+        absent: 1,
+        present: 2,
+        correct: 3
+    };
+
+    const existing = ["correct", "present", "absent"]
+        .find(c => button.classList.contains(c));
+
+    if (!existing || priority[status] > priority[existing]) {
+        button.classList.remove("correct", "present", "absent");
+        button.classList.add(status);
+    }
+}
+
+// Temporary messages
+function showMessage(text) {
+    message.textContent = text;
+
+    setTimeout(() => {
+        if (message.textContent === text) {
+            message.textContent = "";
+        }
+    }, 2500);
+}
+
+// Restart game
+function restartGame() {
+    currentRow = 0;
+    currentGuess = "";
+    gameOver = false;
+
+    // Clear board
+    document.querySelectorAll(".tile").forEach(tile => {
+        tile.textContent = "";
+        tile.className = "tile";
+    });
+
+    // Reset keyboard colors
+    document.querySelectorAll(".key").forEach(key => {
+        key.classList.remove("correct", "present", "absent");
+    });
+
+    // Hide messages and buttons
+    message.textContent = "";
+    document.getElementById("retry").style.display = "none";
+    document.getElementById("result").style.display = "none";
+}
+
+</script>
+
+</body>
+</html>
